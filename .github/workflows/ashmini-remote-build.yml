@@ -1,0 +1,30 @@
+name: Build Ashmini (remote)
+on:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout controller repo
+        uses: actions/checkout@v4
+      - name: Checkout Ashmini app repo
+        uses: actions/checkout@v4
+        with:
+          repository: juggaloares417/Ashmini
+          path: ashmini
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - name: Gradle wrapper perms
+        run: chmod +x ashmini/gradlew
+      - name: Build Debug APK
+        working-directory: ashmini
+        run: ./gradlew :app:assembleDebug --stacktrace
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ashmini-debug-apk
+          path: ashmini/app/build/outputs/apk/**/debug/*.apk
