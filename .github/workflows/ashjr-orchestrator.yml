@@ -1,0 +1,47 @@
+name: AshJR Orchestrator
+on: { workflow_dispatch: {} }
+
+permissions:
+  contents: write
+  actions: write
+  pull-requests: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check secret
+        run: test -n "${{ secrets.ASH_TOKEN }}" || (echo "ASH_TOKEN missing"; exit 1)
+
+      - name: Process targets
+        env:
+          GH_TOKEN: ${{ secrets.ASH_TOKEN }}
+        run: |
+          set -euo pipefail
+          while IFS='|' read -r repo wf ref; do
+            [ -z "$repo" ] && continue
+            echo "::group::Target $repo ($wf@$ref)"
+            rm -rf app
+            gh repo clone "$repo" app -- -q
+            cd app
+            gh workflow run "$wf" --ref "$ref" || true
+            RID=""
+            for i in $(seq 1 30); do
+              RID=$(gh run list --workflow "$wf" --limit 1 --json databaseId -q '.[0].databaseId' || true)
+              [ -n "$RID" ] && break; sleep 3
+            done
+            gh run watch "$RID" || true
+            gh run view "$RID" --log > ../ashjr/run.log
+            cd ..
+            REPO="$repo" RUN_ID="$RID" bash ashjr/ashjr.sh
+            echo "::endgroup::"
+          done < ashjr/targets.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ashjr-artifacts
+          path: |
+            ashjr/run.log
+            ashjr/history.ndjson
